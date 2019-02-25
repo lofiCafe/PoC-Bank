@@ -1,0 +1,210 @@
+//------------------------------------------------
+//--- 010 Editor v7.0 Binary Template
+//
+//      File: ace.bt
+//   Authors: dengxun@360A-Team
+//   Version: 0.1
+//   Purpose: WinACE format parser, study CVE-2018-20250, just support header type MAIN, FILE32
+//  Category: 
+// File Mask: 
+//  ID Bytes: 
+//   History: 
+// Path notice: C:\C:C:../AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+//------------------------------------------------
+
+typedef enum {
+    TYPE_MAIN, TYPE_FILE32
+} ACE_HDR_TYPE;
+
+typedef struct {
+    switch(hdr_type) {
+        case TYPE_MAIN:
+            byte    length;
+            break;
+        case TYPE_FILE32:
+            short   length;
+            break;
+    }
+    char    buffer[length];
+} ACE_STR <read=display_ace_str, write=writer_ace_str>;
+
+void writer_ace_str(ACE_STR &str, string val) {
+    int len_old = str.length;
+    int len_new = Strlen(val);
+    int offset = startof(str) + sizeof(str.length);
+    str.length = len_new;
+
+    if(len_new > len_old) {
+        Strncpy(str.buffer, val, len_old);
+        offset += len_old;
+        int i = 0;
+        for(i = 0;i < len_new - len_old;i ++) {
+            InsertBytes(offset + i, 1, val[len_old + i]);
+        }
+    }
+
+    if(len_new <= len_old) {
+        Strncpy(str.buffer, val, len_new);
+        DeleteBytes(offset + len_new, len_old - len_new);
+    }
+}
+
+typedef struct {
+    char    magic[7];
+    byte    eversion; //extract version
+    byte    cversion; //creator version
+    byte    host <read=display_platform>;     //platform
+    byte    volume;   //volume number
+    DOSTIME dostime; //date/time in MS-DOS format
+    DOSDATE dosdate;
+    byte    reserved1[8] <format=hex>;
+    if(flags.has_advert == 1) {
+        ACE_STR advert; //optional
+    }
+    if(flags.has_comment == 1) {
+        ushort  comment; //optional, compressed
+    }
+    if(false) {
+        ushort reserved2; //optional, unknow what condition????
+    }
+} ACE_BLOCK_MAIN;
+
+typedef struct {
+    long    packsize; //uint32|64 packed size
+    long    origsize; //uint32|64 original size
+    DOSTIME ctime;  //create date/time in MS-DOS format
+    DOSDATE cdate;
+    long    attrib; //file attributes, same as winnt.h defines
+    ulong   crc32<format=hex>;  //checksum over compressed file, crc32
+    byte    comptype <read=display_ace_compresstype>; //compression type
+    byte    compquality; //compression quality
+    short   params; //decompression parameters
+    short   reserved1;
+    ACE_STR filename;
+    if(flags.has_comment == 1) {
+        ushort  comment; //optional, compressed
+    }
+    if(flags.limit2ntsec == 1) {
+        ushort  ntsecurity; //optional
+    }
+    if(false) {
+        ushort  reserved2; //unknow size and what condition
+    }
+} ACE_BLOCK_FILE32;
+
+typedef struct {
+    ushort  hdr_crc <format=hex>; //header crc, crc16
+    short   hdr_size;
+    byte    hdr_type <read=display_type>;
+    //output checksum
+    local ushort ace_crc16 = 0xFFFF & Checksum(CHECKSUM_CRC32, startof(hdr_type),hdr_size) ^ 0xFFFF;
+    Printf("Header ACE_CRC16: %x\r\n", ace_crc16);
+    if(ace_crc16 != hdr_crc) {
+        Printf("Header ACE_CRC16 is not match the hdr_crc(%x), archive will be not work?\r\n", hdr_crc);
+    }
+    struct {
+        ushort  has_addsize: 1;
+        ushort  has_comment: 1;
+        ushort  is_64bit: 1;
+        ushort  :5;
+        ushort  is_v20format: 1; //Is ACE 2.0 FORMAT?
+        ushort  is_sfx: 1; //Is self extracting archive?
+        ushort  limit2ntsec: 1; //dict size limited to 256K
+                                //NTFS security data present
+        ushort  has_multivol: 1; //has multiple volumes
+        ushort  has_advert: 1; //advert string present
+                               //continued from previous volume
+        ushort  recovery: 1; //recovery record present
+                             //continued in next volume
+        ushort  is_lock2password: 1; //archive is locked & password encryped
+        ushort  is_solid: 1; //archive is solid
+    } flags;
+    switch(hdr_type) {
+        case TYPE_MAIN:
+            ACE_BLOCK_MAIN hdr;
+            break;
+        case TYPE_FILE32:
+            ACE_BLOCK_FILE32 hdr;
+            local short size = sizeof(hdr) + 3;
+            Printf("FILE32 block header size is %d\r\n", size);
+            if(size != hdr_size) {
+                Printf("FILE32 block header size is not match the hdr_size(%d), archive will be not work?\r\n", hdr_size); 
+            }
+            ubyte   data[hdr.packsize];
+            break;
+        default:
+            Printf("only support header type MAIN, FILE32\r\n");
+            Exit(0);  
+    }
+} ACE_BLOCK;
+
+struct {
+    while(!FEof()) { 
+        ACE_BLOCK block;
+    }
+} ACE;
+
+string display_platform(byte host) {
+    switch(host) {
+		case 0:
+			return "MS-DOS";
+		case 1:
+			return "OS/2";
+		case 2:
+			return "Win32";
+		case 3:
+			return "Unix";
+		case 4:
+			return "Mac OS";
+		case 5:
+			return "Win NT";
+		case 6:
+			return "Primos";
+		case 7:
+			return "Apple GS";
+		case 8:
+			return "ATARI";
+		case 9:
+			return "VAX VMS";
+		case 10:
+			return "AMIGA";
+		case 11:
+			return "NeXT";
+		case 12:
+			return "Linux";
+        default:
+            return "Unknown";
+    }
+}
+
+string display_type(byte type) {
+    switch(type) {
+		case 0:
+			return "MAIN";
+		case 1:
+			return "FILE32";
+		case 2:
+			return "RECOVERY32";
+		case 3:
+			return "FILE64";
+		case 4:
+			return "RECOVERY64A";
+		case 5:
+			return "RECOVERY64B";
+        default:
+            return "unknown type";
+    }
+}
+
+string display_ace_str(ACE_STR &str) {
+    return str.buffer;
+}
+
+string display_ace_compresstype(byte type) {
+    switch(type) {
+        case 0: return "stored";
+        case 1: return "lz77";
+        case 2: return "blocked";
+        default: return "unknown compress type";
+    }
+}
